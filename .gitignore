@@ -1,3 +1,5 @@
 *.tar.gz
 *.whl
 src/barra2_downloader.egg-info/*
+__pycache__
+venv

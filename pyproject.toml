@@ -20,3 +20,6 @@ license-files = ["LICEN[CS]E*"]
 
 [project.urls]
 Homepage = "https://github.com/bdunc2/barra2_downloader"
+
+[tool.setuptools.package-data]
+barra2_downloader = ["*.json"]
