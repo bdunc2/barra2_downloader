@@ -18,6 +18,12 @@ classifiers = [
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
 
+dependencies = [
+  "numpy >= 2.0.0",
+  "pandas >= 2.2.0",
+  "requests >= 2.30.0"
+]
+
 [project.urls]
 Homepage = "https://github.com/bdunc2/barra2_downloader"
 

@@ -24,6 +24,14 @@ for table in tables:
             'comment': tds[5].text
         }
         var_name = tds[1].text
-        out_dict[var_name] = c_data
+
+        if "(" in var_name:
+            # We have multiple parameters under this one thing
+            var_name = var_name.split("(")[1][:-1].split(",")
+        else:
+            var_name = [var_name]
+
+        for v in var_name:
+            out_dict[v.strip()] = c_data
 
 json.dump(out_dict, open('./src/barra2_downloader/barra_variables.json', 'w'))
