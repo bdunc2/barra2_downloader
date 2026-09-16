@@ -12,6 +12,8 @@ import numpy as np
 from datetime import datetime, timezone, timedelta
 import requests
 import time
+import traceback
+import concurrent.futures
 
 """
     Returns a dictionary with keys being a tuple of (month [int], year [int]) and value being a tuple of (s_dt, e_dt) being the start and end datetimes within that month. All sections joined together should consistute a continuous block from time_start to time_end
@@ -60,6 +62,16 @@ def get_months_spanning(
 
     return times
 
+def _download_df(url):
+    try:
+        with requests.get(url, stream=True) as resp:
+            resp.raise_for_status()
+            c_df = pd.read_csv(resp.raw)
+    except:
+        traceback.print_exc()
+        return None
+    return c_df
+
 """
     rate_limiter_delay: The time (seconds) to wait between data downloads (for rate limiting)
     verbose: Whether or not to print out status updates
@@ -75,7 +87,9 @@ def get_df_for_data(
         longitude: float | None = None,
         bbox: url_builder.BBox | None = None,
         rate_limiter_delay: float = 0.25,
-        verbose: bool = False
+        verbose: bool = False,
+        threaded_download: bool = False,
+        max_threads: int = 3
     ):
     if ((latitude is None) or (longitude is None)) and (bbox is None):
         raise ValueError("Require one of latitude/longitude or bbox")
@@ -91,43 +105,67 @@ def get_df_for_data(
     if verbose:
         print (f"Have to make {len(data_times)} requests to get requested data")
 
-    # Start iterating the data
-    df = None
-    for idx, (month, year) in enumerate(data_times):
+    # Build the urls
+    urls = []
+    for month, year in data_times:
         s_dt, e_dt = data_times[month, year]
 
-        url = url_builder.get_url(
-            model, 
-            domain, 
-            frequency, 
-            var, 
-            month, 
-            year, 
-            latitude=latitude, 
-            longitude=longitude, 
-            bbox=bbox, 
-            time_start=s_dt, 
-            time_end=e_dt, 
-            out_format=url_builder.BARRA2OutputFormat.CSV
+        urls.append(
+            url_builder.get_url(
+                model, 
+                domain, 
+                frequency, 
+                var, 
+                month, 
+                year, 
+                latitude=latitude, 
+                longitude=longitude, 
+                bbox=bbox, 
+                time_start=s_dt, 
+                time_end=e_dt, 
+                out_format=url_builder.BARRA2OutputFormat.CSV
+            )
         )
 
+    dfs = []
+    if threaded_download:
         if verbose:
-            print (f"Downloading #{idx: 03d} [{(idx / len(data_times)) * 100:03.1f} %] from {url}")
+            print (f"Starting threaded download with {max_threads} threads")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+            dfs = list(executor.map(_download_df, urls))
+    else:
+        if verbose:
+            print (f"Starting serial download (with sleeping for rate limiter avoidance)")
+        
+        for idx, url in enumerate(urls):
+            if verbose:
+                print (f"Downloading #{idx: 03d} [{(idx / len(urls)) * 100:03.1f} %] from {url}")
+    
+            dfs.append(_download_df(url))
 
-        with requests.get(url, stream=True) as resp:
-            resp.raise_for_status()
-            c_df = pd.read_csv(resp.raw)
+            if idx != len(urls) - 1:
+                print (f"Sleeping {rate_limiter_delay:.2f} seconds to avoid rate limiter")
+                time.sleep(rate_limiter_delay)
 
-        if df is None:
-            df = c_df
-        else:
-            df = pd.concat((df, c_df))
-
-        if idx != len(data_times) - 1:
-            print (f"Sleeping {rate_limiter_delay:.2f} seconds to avoid rate limiter")
-            time.sleep(rate_limiter_delay)
+    if verbose:
+        print (f"Concatenating {len(dfs)} files into 1 df")
+        df = None
+        for c_df in dfs:
+            if df is None:
+                df = c_df
+            else:
+                df = pd.concat((df, c_df))
 
     df.reset_index(drop=True, inplace=True)
+    if verbose:
+        print ("Converting time column to pandas datetime object, and ordering [if multithreaded]")
+    df["time"] = pd.to_datetime(df["time"])
+    if threaded_download:
+        df.sort_values(by='time', inplace=True)
+        df.reset_index(drop=True, inplace=True)
+    if verbose:
+        print (f"Retrieved a dataframe of shape {df.shape}")
+
     return df
 
 
@@ -136,10 +174,11 @@ if __name__ == "__main__":
         model_domains.BARRAModel.BARRA_C2,
         model_domains.BARRADomain.AUST_04,
         model_domains.BARRAFrequency.hour,
-        "tasmax",
+        "ps",
         datetime(2026, 3, 4, 13, 45, 0, tzinfo=timezone.utc),
         datetime(2026, 5, 25, 0, 0, 0, tzinfo=timezone.utc),
         latitude=-26.52267239,
         longitude=152.573373,
-        verbose=True
+        verbose=True,
+        threaded_download=True
     ))
