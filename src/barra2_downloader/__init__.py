@@ -170,6 +170,13 @@ def get_df_for_data(
 
 
 if __name__ == "__main__":
+    print (params.get_available_parameters(
+        model_domains.BARRAModel.BARRA_C2,
+        model_domains.BARRADomain.AUST_04,
+        model_domains.BARRAFrequency.min20
+    ))
+
+
     print (get_df_for_data(
         model_domains.BARRAModel.BARRA_C2,
         model_domains.BARRADomain.AUST_04,

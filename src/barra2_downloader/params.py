@@ -38,3 +38,16 @@ def check_valid_pairing(
         mdf: BARRAModelDomainFrequency
     ):
     return (var in BARRA_VARS) and (mdf in BARRA_VARS[var][2]) # It is in the list and it's available in the given model/domain/frequency
+
+def get_available_parameters(
+        model: BARRAModel,
+        domain: BARRADomain,
+        frequency: BARRAFrequency    
+    ):
+
+    mdf = (model, domain, frequency)
+    vars = []
+    for var in BARRA_VARS:
+        if mdf in BARRA_VARS[var][2]:
+            vars.append(var)
+    return vars
