@@ -29,3 +29,9 @@ Current features are:
 - Multiple variable download into a single pandas df, with time-synced rows
 - Threaded download, with an adjustable number of workers
 - Serial download, with sleep for rate limiter avoidance
+
+Planned features are:
+- Downloading of a netCDF file from server which has been constrained to a bounding box
+  - Possibly loading into a geopandas df or other raster format for RAM processing
+- Offline caching abilities (i.e. set a cache directory and if anything is requested if gets saved there -> reduces need to download)
+- Still thinking of more things to do slowly
