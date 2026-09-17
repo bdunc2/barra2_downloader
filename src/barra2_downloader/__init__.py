@@ -68,6 +68,7 @@ def _download_df(url):
             resp.raise_for_status()
             c_df = pd.read_csv(resp.raw)
     except:
+        print (f"Failed to download from url: {url}")
         traceback.print_exc()
         return None
     return c_df
@@ -80,7 +81,7 @@ def get_df_for_data(
         model: model_domains.BARRAModel, 
         domain: model_domains.BARRADomain, 
         frequency: model_domains.BARRAFrequency, 
-        var: str,
+        var: str | list[str],
         time_start: int | float | datetime,
         time_end: int | float | datetime,
         latitude: float | None = None,
@@ -97,9 +98,13 @@ def get_df_for_data(
     if (bbox is not None):
         raise NotImplementedError("BBox is currently not implemented -> GeoPandas df / netcdf stuff will be done soon. Currently single point")
 
+    if type(var) == str:
+        var = [var] # Just make it a list
+
     mdf = (model, domain, frequency)
-    if not params.check_valid_pairing(var, mdf):
-        raise ValueError(f"parameter {var} is not available for {model.value}/{domain.value}/{frequency.value}")
+    for v in var:
+        if not params.check_valid_pairing(v, mdf):
+            raise ValueError(f"parameter {v} is not available for {model.value}/{domain.value}/{frequency.value}")
 
     data_times = get_months_spanning(time_start, time_end)
     if verbose:
@@ -107,25 +112,26 @@ def get_df_for_data(
 
     # Build the urls
     urls = []
-    for month, year in data_times:
-        s_dt, e_dt = data_times[month, year]
+    for v in var:
+        for month, year in data_times:
+            s_dt, e_dt = data_times[month, year]
 
-        urls.append(
-            url_builder.get_url(
-                model, 
-                domain, 
-                frequency, 
-                var, 
-                month, 
-                year, 
-                latitude=latitude, 
-                longitude=longitude, 
-                bbox=bbox, 
-                time_start=s_dt, 
-                time_end=e_dt, 
-                out_format=url_builder.BARRA2OutputFormat.CSV
+            urls.append(
+                url_builder.get_url(
+                    model, 
+                    domain, 
+                    frequency, 
+                    v, 
+                    month, 
+                    year, 
+                    latitude=latitude, 
+                    longitude=longitude, 
+                    bbox=bbox, 
+                    time_start=s_dt, 
+                    time_end=e_dt, 
+                    out_format=url_builder.BARRA2OutputFormat.CSV
+                )
             )
-        )
 
     dfs = []
     if threaded_download:
@@ -149,43 +155,39 @@ def get_df_for_data(
 
     if verbose:
         print (f"Concatenating {len(dfs)} files into 1 df")
-        df = None
-        for c_df in dfs:
-            if df is None:
-                df = c_df
-            else:
-                df = pd.concat((df, c_df))
+
+    # TODO: Make it so that with multiple variables, we join it into single lines
+    var_dfs = {}
+    for c_df in dfs:
+        if c_df is None:
+            continue # Failed to download it!!!
+
+        # Get the variable (i.e. the header)
+        var_header = c_df.columns[-1]
+        if var_header not in var_dfs:
+            var_dfs[var_header] = c_df # Done
+        else:
+            var_dfs[var_header] = pd.concat((var_dfs[var_header], c_df))
+
+    if verbose:
+        print ("Joining all the variable dataframes together, whilst converting the time string to timestamp type")
+    df = None
+    for var_name in var_dfs:
+        var_dfs[var_name]["time"] = pd.to_datetime(var_dfs[var_name]["time"])
+        if df is None:
+            df = var_dfs[var_name]
+        else:
+            col_sel = ["time", var_dfs[var_name].columns[-1]] # Should just be time and the actual variable (don't need to repeat station / lat / lon)
+            df = pd.merge(df, var_dfs[var_name][col_sel], on='time', how='outer') # Join in everything (allow new times such as temp as they are halfway points)
 
     df.reset_index(drop=True, inplace=True)
     if verbose:
-        print ("Converting time column to pandas datetime object, and ordering [if multithreaded]")
-    df["time"] = pd.to_datetime(df["time"])
-    if threaded_download:
-        df.sort_values(by='time', inplace=True)
-        df.reset_index(drop=True, inplace=True)
+        print ("Ordering the dataframe based on the time")
+    
+    df.sort_values(by='time', inplace=True)
+    df.reset_index(drop=True, inplace=True)
+
     if verbose:
         print (f"Retrieved a dataframe of shape {df.shape}")
 
     return df
-
-
-if __name__ == "__main__":
-    print (params.get_available_parameters(
-        model_domains.BARRAModel.BARRA_C2,
-        model_domains.BARRADomain.AUST_04,
-        model_domains.BARRAFrequency.min20
-    ))
-
-
-    print (get_df_for_data(
-        model_domains.BARRAModel.BARRA_C2,
-        model_domains.BARRADomain.AUST_04,
-        model_domains.BARRAFrequency.hour,
-        "ps",
-        datetime(2026, 3, 4, 13, 45, 0, tzinfo=timezone.utc),
-        datetime(2026, 5, 25, 0, 0, 0, tzinfo=timezone.utc),
-        latitude=-26.52267239,
-        longitude=152.573373,
-        verbose=True,
-        threaded_download=True
-    ))

@@ -1,7 +1,7 @@
 try:
-    from .model_domains import BARRAFrequency, BARRADomain, BARRAModel, BARRAVarClass, BARRAModelDomainFrequency, BARRAVariableInfo
+    from .model_domains import BARRAFrequency, BARRADomain, BARRAModel, BARRAVarClass, BARRAModelDomainFrequency, BARRAVariableInfo, get_mdf_from_str
 except:
-    from model_domains import BARRAFrequency, BARRADomain, BARRAModel, BARRAVarClass, BARRAModelDomainFrequency, BARRAVariableInfo
+    from model_domains import BARRAFrequency, BARRADomain, BARRAModel, BARRAVarClass, BARRAModelDomainFrequency, BARRAVariableInfo, get_mdf_from_str
 import json
 from importlib import resources
 
@@ -24,11 +24,7 @@ for var_name in raw_var_list:
     mdfs = []
     for s in var_data['mdf']:
         try:
-            s = s.split("/")
-            model = BARRAModel(s[0])
-            domain = BARRADomain(s[1])
-            frequency = BARRAFrequency(s[2])
-            mdfs.append((model, domain, frequency))
+            mdfs.append(get_mdf_from_str(s))
         except:
             pass
     BARRA_VARS[var_name] = (var_data['name'], var_data['desc'], mdfs, var_class, var_data['comment'])

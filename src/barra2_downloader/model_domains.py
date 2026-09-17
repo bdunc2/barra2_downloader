@@ -28,3 +28,10 @@ class BARRAFrequency(Enum):
 
 BARRAModelDomainFrequency: TypeAlias = tuple[BARRAModel, BARRADomain, BARRAFrequency]
 BARRAVariableInfo: TypeAlias = tuple[str, str, list[BARRAModelDomainFrequency], BARRAVarClass, str] # long name, description, list of model/domain/frequency available in, variable class, comment
+
+def get_mdf_from_str(s: str) -> BARRAModelDomainFrequency:
+    s = s.split("/")
+    model = BARRAModel(s[0])
+    domain = BARRADomain(s[1])
+    frequency = BARRAFrequency(s[2])
+    return (model, domain, frequency)
